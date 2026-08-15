@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QuikerPick: Pick it Quiker</title>
 <link rel="icon" href="quikerpick-icon.png">
-  
+
 <style>
 * {box-sizing: border-box;}
 
@@ -439,12 +439,9 @@ async function showResults() {
                     ? titleWords.slice(0, 10).join(" ") + "..."
                     : product.title;
 
-            // Get Etsy product image
+            // Etsy image supplied by the Edge Function
             const imageUrl =
-                product.images &&
-                product.images.length > 0
-                    ? product.images[0].url_570xN
-                    : null;
+                product.image || null;
 
             productsHTML +=
 
