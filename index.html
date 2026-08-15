@@ -420,6 +420,15 @@ async function showResults() {
                 "https://www.etsy.com/listing/" +
                 product.listing_id;
 
+            // Limit product title to 10 words
+            const titleWords =
+                product.title.trim().split(/\s+/);
+
+            const shortTitle =
+                titleWords.length > 10
+                    ? titleWords.slice(0, 10).join(" ") + "..."
+                    : product.title;
+
             productsHTML +=
 
                 "<a href='" +
@@ -430,7 +439,7 @@ async function showResults() {
                     "<div>" +
 
                         "<h3>" +
-                        product.title +
+                        shortTitle +
                         "</h3>" +
 
                         "<p>Store: Etsy</p>" +
