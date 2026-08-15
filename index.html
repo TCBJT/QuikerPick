@@ -2,8 +2,8 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
 <title>QuikerPick: Pick it Quiker</title>
+
 <style>
 * {box-sizing: border-box;}
 
@@ -110,7 +110,7 @@ body {
 
 @font-face {
   font-family: basefont;
-  src: url( fonts/Scanport-1.ttf);
+  src: url(fonts/Scanport-1.ttf);
 }
 
 #currencySelect {
@@ -201,6 +201,7 @@ body {
   <a class="active" href="#home">Home</a>
   <a href="#about">About</a>
   <a href="signup.html">Signup</a>
+
   <div class="search-container">
     <form>
       <input type="text" placeholder="Search.." name="search">
@@ -211,38 +212,7 @@ body {
 
 <div style="font-size: x-large;" id="results"></div>
 
-<!-- D5.3 NEW: Load Supabase -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script>
-const SUPABASE_URL = "https://nhhfskfggryiqbyvjbzj.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_klQh-ZbcD1FsjlcT0mbzyw_NnLc75JH";
-
-const supabaseClient = supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_PUBLISHABLE_KEY
-);
-
-console.log("QuikerPick connected to Supabase!");
-
-async function testSupabaseConnection() {
-    const { data, error } = await supabaseClient
-        .from("connection_test")
-        .select("message")
-        .limit(1);
-
-    if (error) {
-        console.error("Supabase database test failed:", error);
-        return;
-    }
-
-    console.log("Supabase database says:", data[0].message);
-}
-
-testSupabaseConnection();
-
 const params = new URLSearchParams(window.location.search);
 const search = params.get("search");
 
@@ -264,26 +234,53 @@ async function showResults() {
         JPY: "Japanese Yen (¥)"
     };
 
-    // Get products from Supabase
-    const { data: products, error: productsError } = await supabaseClient
-        .from("products")
-        .select("*");
+    // Ask the Supabase Edge Function for real Etsy products
+    let products;
 
-    if (productsError) {
-        console.error("Could not load products:", productsError);
+    try {
+
+        const response = await fetch(
+            "https://nhhfskfggryiqbyvjbzj.supabase.co/functions/v1/etsy-api",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    search: search
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.error || "Etsy request failed."
+            );
+        }
+
+        products = data.results || [];
+
+        console.log("Etsy products:", products);
+
+    } catch (error) {
+
+        console.error("Etsy error:", error);
 
         document.getElementById("results").innerHTML =
             "<h2>Search results for: " +
             search +
             "</h2>" +
-            "<p>We couldn't load the products right now.</p>";
+            "<p>Could not load Etsy products.</p>";
 
         return;
     }
 
-    console.log("Products loaded from Supabase:", products);
 
-    // Get the latest exchange rates.
+    // Get exchange rates
     let exchangeRates;
 
     try {
@@ -295,12 +292,16 @@ async function showResults() {
         const data = await response.json();
 
         if (data.result !== "success") {
-            throw new Error("Exchange rate request failed.");
+            throw new Error(
+                "Exchange rate request failed."
+            );
         }
 
         exchangeRates = data.rates;
 
     } catch (error) {
+
+        console.error("Exchange rate error:", error);
 
         document.getElementById("results").innerHTML =
             "<h2>Search results for: " +
@@ -311,6 +312,8 @@ async function showResults() {
         return;
     }
 
+
+    // Currency dropdown
     let currencyOptions = "";
 
     for (const code in currencies) {
@@ -325,6 +328,7 @@ async function showResults() {
             "</option>";
     }
 
+
     let resultsHTML =
         "<h2>Search results for: " +
         search +
@@ -338,51 +342,61 @@ async function showResults() {
 
         "<div id='productResults'></div>";
 
+
     document.getElementById("results").innerHTML =
         resultsHTML;
 
+
     function displayProducts(currencyCode) {
-
-        const searchLower =
-            search.toLowerCase();
-
-        const matchingProducts =
-            products.filter(product =>
-                product.name
-                    .toLowerCase()
-                    .includes(searchLower)
-            );
 
         let productsHTML = "";
 
-        matchingProducts.forEach(product => {
 
-            // Convert from the product's original currency
-            // into NGN first, then into the user's selected currency.
+        products.forEach(product => {
+
+            if (!product.price) {
+                return;
+            }
+
+
+            // Etsy price
+            const originalPrice =
+                Number(product.price.amount) /
+                Number(product.price.divisor || 100);
+
+
+            const originalCurrency =
+                product.price.currency_code;
+
+
+            // Convert original Etsy currency to NGN
             let priceInNGN;
 
-            if (product.original_currency === "NGN") {
+            if (originalCurrency === "NGN") {
 
-                priceInNGN = Number(product.price);
+                priceInNGN = originalPrice;
 
             } else {
 
                 const rateToNGN =
-                    exchangeRates[product.original_currency];
+                    exchangeRates[originalCurrency];
 
                 if (!rateToNGN) {
                     return;
                 }
 
                 priceInNGN =
-                    Number(product.price) / rateToNGN;
+                    originalPrice / rateToNGN;
             }
 
+
+            // Convert NGN to selected currency
             const exchangeRate =
                 exchangeRates[currencyCode] || 1;
 
             const convertedPrice =
                 priceInNGN * exchangeRate;
+
 
             const formattedPrice =
                 new Intl.NumberFormat(
@@ -393,44 +407,51 @@ async function showResults() {
                     }
                 ).format(convertedPrice);
 
+
+            // Etsy listing link
+            const productLink =
+                "https://www.etsy.com/listing/" +
+                product.listing_id;
+
+
+            // Etsy product image
+            const productImage =
+                product.images &&
+                product.images.length > 0
+                    ? product.images[0].url_570xN
+                    : "";
+
+
             productsHTML +=
 
                 "<a href='" +
-                product.link +
-                "' style='text-decoration: none; color: inherit;'>" +
+                productLink +
+                "' target='_blank' " +
+                "rel='noopener noreferrer'>" +
 
-                    "<div style='" +
-                        "padding: 15px;" +
-                        "margin-top: 10px;" +
-                        "width: 300px;" +
-                        "background: white;" +
-                        "border: 1px solid #ccc;" +
-                        "border-radius: 8px;" +
-                        "cursor: pointer;" +
-                    "'>" +
+                    "<div>" +
 
-                        // Product image
-                        (product.image
-                            ? "<img src='" +
-                              product.image +
-                              "' alt='" +
-                              product.name +
-                              "' style='" +
-                                  "width: 100%;" +
-                                  "height: 200px;" +
-                                  "object-fit: contain;" +
-                                  "border-radius: 8px;" +
-                                  "margin-bottom: 12px;" +
-                              "'>"
-                            : "") +
+                        (
+                            productImage
+                                ? "<img src='" +
+                                  productImage +
+                                  "' alt='" +
+                                  product.title +
+                                  "' style='" +
+                                      "width: 100%;" +
+                                      "height: 200px;" +
+                                      "object-fit: contain;" +
+                                      "border-radius: 8px;" +
+                                      "margin-bottom: 12px;" +
+                                  "'>"
+                                : ""
+                        ) +
 
                         "<h3>" +
-                        product.name +
+                        product.title +
                         "</h3>" +
 
-                        "<p>Store: " +
-                        product.store +
-                        "</p>" +
+                        "<p>Store: Etsy</p>" +
 
                         "<p>Price: " +
                         formattedPrice +
@@ -441,27 +462,35 @@ async function showResults() {
                 "</a>";
         });
 
-        if (matchingProducts.length === 0) {
+
+        if (!productsHTML) {
 
             productsHTML =
-                "<p>No products found.</p>";
+                "<p>No Etsy products found.</p>";
         }
+
 
         document.getElementById("productResults").innerHTML =
             productsHTML;
     }
 
+
     displayProducts(selectedCurrency);
+
 
     document
         .getElementById("currencySelect")
-        .addEventListener("change", function () {
+        .addEventListener(
+            "change",
+            function () {
 
-            selectedCurrency = this.value;
+                selectedCurrency = this.value;
 
-            displayProducts(selectedCurrency);
-        });
+                displayProducts(selectedCurrency);
+            }
+        );
 }
+
 
 showResults();
 </script>
