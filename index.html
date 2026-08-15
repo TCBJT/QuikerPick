@@ -180,6 +180,7 @@ body {
 #productResults h3 {
   color: #26436D;
   margin-top: 0;
+  font-size: 19.6px;
 }
 
 #productResults p {
@@ -191,6 +192,39 @@ body {
   font-weight: bold;
   color: #26436D;
   margin-top: 14px;
+}
+
+.product-image {
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+#loadMoreButton {
+  display: block;
+  margin: 30px auto;
+  padding: 12px 24px;
+  background-color: #D3A5AF;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+#loadMoreButton:hover {
+  background-color: #26436D;
+}
+
+#loadingMessage {
+  width: 100%;
+  color: #26436D;
+  font-size: 18px;
+  margin: 10px 0;
 }
 </style>
 </head>
@@ -213,83 +247,95 @@ body {
 <div style="font-size: x-large;" id="results"></div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const search = params.get("search");
 
-async function showResults() {
+const ETSY_FUNCTION_URL =
+    "https://nhhfskfggryiqbyvjbzj.supabase.co/functions/v1/etsy-api";
 
-    if (!search) {
-        return;
+const params =
+    new URLSearchParams(window.location.search);
+
+const search =
+    params.get("search");
+
+
+let selectedCurrency = "NGN";
+
+let currentPage = 1;
+
+let loading = false;
+
+let hasMoreProducts = true;
+
+let products = [];
+
+let exchangeRates;
+
+
+const currencies = {
+
+    NGN: "Nigerian Naira (₦)",
+
+    USD: "US Dollar ($)",
+
+    GBP: "British Pound (£)",
+
+    EUR: "Euro (€)",
+
+    EGP: "Egyptian Pound (E£)",
+
+    INR: "Indian Rupee (₹)",
+
+    JPY: "Japanese Yen (¥)"
+
+};
+
+
+
+/*
+ * Limit titles by WORDS.
+ *
+ * This is a 10-WORD limit,
+ * not a character limit.
+ */
+
+function limitTitleWords(title, maxWords) {
+
+    if (!title) {
+        return "";
     }
 
-    let selectedCurrency = "NGN";
+    const words =
+        title.trim().split(/\s+/);
 
-    const currencies = {
-        NGN: "Nigerian Naira (₦)",
-        USD: "US Dollar ($)",
-        GBP: "British Pound (£)",
-        EUR: "Euro (€)",
-        EGP: "Egyptian Pound (E£)",
-        INR: "Indian Rupee (₹)",
-        JPY: "Japanese Yen (¥)"
-    };
+    if (words.length <= maxWords) {
+        return title;
+    }
 
-    // Ask the Supabase Edge Function for real Etsy products
-    let products;
+    return (
+        words
+            .slice(0, maxWords)
+            .join(" ") +
+        "..."
+    );
+}
+
+
+
+/*
+ * Get exchange rates.
+ */
+
+async function loadExchangeRates() {
 
     try {
 
-        const response = await fetch(
-            "https://nhhfskfggryiqbyvjbzj.supabase.co/functions/v1/etsy-api",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    search: search
-                })
-            }
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(
-                data.error || "Etsy request failed."
+        const response =
+            await fetch(
+                "https://open.er-api.com/v6/latest/NGN"
             );
-        }
 
-        products = data.results || [];
-
-        console.log("Etsy products:", products);
-
-    } catch (error) {
-
-        console.error("Etsy error:", error);
-
-        document.getElementById("results").innerHTML =
-            "<h2>Search results for: " +
-            search +
-            "</h2>" +
-            "<p>Could not load Etsy products.</p>";
-
-        return;
-    }
-
-
-    // Get exchange rates
-    let exchangeRates;
-
-    try {
-
-        const response = await fetch(
-            "https://open.er-api.com/v6/latest/NGN"
-        );
-
-        const data = await response.json();
+        const data =
+            await response.json();
 
         if (data.result !== "success") {
             throw new Error(
@@ -297,202 +343,498 @@ async function showResults() {
             );
         }
 
-        exchangeRates = data.rates;
+        exchangeRates =
+            data.rates;
+
+        return true;
 
     } catch (error) {
 
-        console.error("Exchange rate error:", error);
+        console.error(
+            "Exchange rate error:",
+            error
+        );
 
-        document.getElementById("results").innerHTML =
-            "<h2>Search results for: " +
-            search +
-            "</h2>" +
-            "<p>We couldn't load the exchange rates right now.</p>";
+        return false;
+    }
+}
+
+
+
+/*
+ * Create the product card.
+ */
+
+function createProductCard(product) {
+
+    if (!product.price) {
+        return "";
+    }
+
+
+    const originalPrice =
+
+        Number(product.price.amount) /
+
+        Number(
+            product.price.divisor || 100
+        );
+
+
+    const originalCurrency =
+        product.price.currency_code;
+
+
+    let priceInNGN;
+
+
+    if (originalCurrency === "NGN") {
+
+        priceInNGN =
+            originalPrice;
+
+    } else {
+
+        const rateToNGN =
+            exchangeRates[
+                originalCurrency
+            ];
+
+        if (!rateToNGN) {
+            return "";
+        }
+
+        priceInNGN =
+            originalPrice /
+            rateToNGN;
+    }
+
+
+    const exchangeRate =
+        exchangeRates[
+            selectedCurrency
+        ] || 1;
+
+
+    const convertedPrice =
+        priceInNGN *
+        exchangeRate;
+
+
+    const formattedPrice =
+
+        new Intl.NumberFormat(
+
+            undefined,
+
+            {
+                style: "currency",
+
+                currency:
+                    selectedCurrency
+            }
+
+        ).format(
+            convertedPrice
+        );
+
+
+    /*
+     * Etsy listing URL
+     */
+
+    const productLink =
+
+        "https://www.etsy.com/listing/" +
+        product.listing_id;
+
+
+    /*
+     * Etsy image.
+     *
+     * Etsy can return several image
+     * sizes. Try the largest useful
+     * one first, then fall back.
+     */
+
+    let productImage = "";
+
+
+    if (
+        product.images &&
+        product.images.length > 0
+    ) {
+
+        const image =
+            product.images[0];
+
+
+        productImage =
+
+            image.url_fullxfull ||
+            image.url_570xN ||
+            image.url_300x300 ||
+            image.url_170x135 ||
+            "";
+    }
+
+
+    const title =
+
+        limitTitleWords(
+            product.title,
+            10
+        );
+
+
+    return
+
+        "<a href='" +
+        productLink +
+        "' target='_blank' " +
+        "rel='noopener noreferrer'>" +
+
+            "<div>" +
+
+                (
+                    productImage
+
+                        ? "<img " +
+                          "class='product-image' " +
+                          "src='" +
+                          productImage +
+                          "' " +
+                          "alt='" +
+                          title +
+                          "'>"
+
+                        : ""
+                ) +
+
+                "<h3>" +
+                title +
+                "</h3>" +
+
+                "<p>Store: Etsy</p>" +
+
+                "<p>Price: " +
+                formattedPrice +
+                "</p>" +
+
+            "</div>" +
+
+        "</a>";
+}
+
+
+
+/*
+ * Display all loaded products.
+ */
+
+function displayProducts() {
+
+    const productResults =
+        document.getElementById(
+            "productResults"
+        );
+
+
+    let productsHTML = "";
+
+
+    products.forEach(
+        product => {
+
+            productsHTML +=
+                createProductCard(
+                    product
+                );
+        }
+    );
+
+
+    if (!productsHTML) {
+
+        productsHTML =
+            "<p>No Etsy products found.</p>";
+    }
+
+
+    productResults.innerHTML =
+        productsHTML;
+
+
+    /*
+     * Add loading-more button
+     */
+
+    if (hasMoreProducts) {
+
+        productResults.innerHTML +=
+
+            "<button id='loadMoreButton'>" +
+            "Load More Products" +
+            "</button>";
+
+        document
+            .getElementById(
+                "loadMoreButton"
+            )
+            .addEventListener(
+                "click",
+                loadMoreProducts
+            );
+    }
+}
+
+
+
+/*
+ * Ask the Edge Function for
+ * another Etsy page.
+ */
+
+async function loadMoreProducts() {
+
+    if (loading || !hasMoreProducts) {
+        return;
+    }
+
+
+    loading = true;
+
+
+    const button =
+        document.getElementById(
+            "loadMoreButton"
+        );
+
+
+    if (button) {
+
+        button.disabled = true;
+
+        button.textContent =
+            "Loading...";
+    }
+
+
+    try {
+
+        const response =
+
+            await fetch(
+                ETSY_FUNCTION_URL,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify({
+                            search:
+                                search,
+
+                            page:
+                                currentPage
+                        })
+                }
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.error ||
+                "Etsy request failed."
+            );
+        }
+
+
+        const newProducts =
+            data.results || [];
+
+
+        if (
+            newProducts.length === 0
+        ) {
+
+            hasMoreProducts =
+                false;
+
+        } else {
+
+            products =
+                products.concat(
+                    newProducts
+                );
+
+            currentPage++;
+        }
+
+
+        displayProducts();
+
+
+    } catch (error) {
+
+        console.error(
+            "Etsy error:",
+            error
+        );
+
+
+        if (button) {
+
+            button.disabled =
+                false;
+
+            button.textContent =
+                "Try Again";
+        }
+
+    } finally {
+
+        loading =
+            false;
+    }
+}
+
+
+
+/*
+ * Initial page setup.
+ */
+
+async function showResults() {
+
+    if (!search) {
+        return;
+    }
+
+
+    document
+        .getElementById("results")
+        .innerHTML =
+
+        "<h2>Search results for: " +
+        search +
+        "</h2>" +
+
+        "<label for='currencySelect'>" +
+        "Currency: " +
+        "</label>" +
+
+        "<select id='currencySelect'>";
+
+
+
+    let currencyOptions = "";
+
+
+    for (
+        const code in currencies
+    ) {
+
+        currencyOptions +=
+
+            "<option value='" +
+            code +
+            "'" +
+
+            (
+                code ===
+                selectedCurrency
+                    ? " selected"
+                    : ""
+            ) +
+
+            ">" +
+
+            currencies[code] +
+
+            "</option>";
+    }
+
+
+    document
+        .getElementById("results")
+        .innerHTML +=
+
+        currencyOptions +
+
+        "</select>" +
+
+        "<div id='productResults'>" +
+
+        "<p id='loadingMessage'>" +
+        "Loading Etsy products..." +
+        "</p>" +
+
+        "</div>";
+
+
+    /*
+     * Currency selector
+     */
+
+    document
+        .getElementById(
+            "currencySelect"
+        )
+        .addEventListener(
+            "change",
+            function () {
+
+                selectedCurrency =
+                    this.value;
+
+                displayProducts();
+            }
+        );
+
+
+    /*
+     * Exchange rates first.
+     */
+
+    const ratesLoaded =
+        await loadExchangeRates();
+
+
+    if (!ratesLoaded) {
+
+        document
+            .getElementById(
+                "productResults"
+            )
+            .innerHTML =
+
+            "<p>We couldn't load the " +
+            "exchange rates right now.</p>";
 
         return;
     }
 
 
-    // Currency dropdown
-    let currencyOptions = "";
+    /*
+     * Load first Etsy page.
+     */
 
-    for (const code in currencies) {
-
-        currencyOptions +=
-            "<option value='" +
-            code +
-            "'" +
-            (code === selectedCurrency ? " selected" : "") +
-            ">" +
-            currencies[code] +
-            "</option>";
-    }
-
-
-    let resultsHTML =
-        "<h2>Search results for: " +
-        search +
-        "</h2>" +
-
-        "<label for='currencySelect'>Currency: </label>" +
-
-        "<select id='currencySelect'>" +
-            currencyOptions +
-        "</select>" +
-
-        "<div id='productResults'></div>";
-
-
-    document.getElementById("results").innerHTML =
-        resultsHTML;
-
-
-    function displayProducts(currencyCode) {
-
-        let productsHTML = "";
-
-
-        products.forEach(product => {
-
-            if (!product.price) {
-                return;
-            }
-
-
-            // Etsy price
-            const originalPrice =
-                Number(product.price.amount) /
-                Number(product.price.divisor || 100);
-
-
-            const originalCurrency =
-                product.price.currency_code;
-
-
-            // Convert original Etsy currency to NGN
-            let priceInNGN;
-
-            if (originalCurrency === "NGN") {
-
-                priceInNGN = originalPrice;
-
-            } else {
-
-                const rateToNGN =
-                    exchangeRates[originalCurrency];
-
-                if (!rateToNGN) {
-                    return;
-                }
-
-                priceInNGN =
-                    originalPrice / rateToNGN;
-            }
-
-
-            // Convert NGN to selected currency
-            const exchangeRate =
-                exchangeRates[currencyCode] || 1;
-
-            const convertedPrice =
-                priceInNGN * exchangeRate;
-
-
-            const formattedPrice =
-                new Intl.NumberFormat(
-                    undefined,
-                    {
-                        style: "currency",
-                        currency: currencyCode
-                    }
-                ).format(convertedPrice);
-
-
-            // Etsy listing link
-            const productLink =
-                "https://www.etsy.com/listing/" +
-                product.listing_id;
-
-
-            // Etsy product image
-            const productImage =
-                product.images &&
-                product.images.length > 0
-                    ? product.images[0].url_570xN
-                    : "";
-
-
-            productsHTML +=
-
-                "<a href='" +
-                productLink +
-                "' target='_blank' " +
-                "rel='noopener noreferrer'>" +
-
-                    "<div>" +
-
-                        (
-                            productImage
-                                ? "<img src='" +
-                                  productImage +
-                                  "' alt='" +
-                                  product.title +
-                                  "' style='" +
-                                      "width: 100%;" +
-                                      "height: 200px;" +
-                                      "object-fit: contain;" +
-                                      "border-radius: 8px;" +
-                                      "margin-bottom: 12px;" +
-                                  "'>"
-                                : ""
-                        ) +
-
-                        "<h3>" +
-                        product.title +
-                        "</h3>" +
-
-                        "<p>Store: Etsy</p>" +
-
-                        "<p>Price: " +
-                        formattedPrice +
-                        "</p>" +
-
-                    "</div>" +
-
-                "</a>";
-        });
-
-
-        if (!productsHTML) {
-
-            productsHTML =
-                "<p>No Etsy products found.</p>";
-        }
-
-
-        document.getElementById("productResults").innerHTML =
-            productsHTML;
-    }
-
-
-    displayProducts(selectedCurrency);
-
-
-    document
-        .getElementById("currencySelect")
-        .addEventListener(
-            "change",
-            function () {
-
-                selectedCurrency = this.value;
-
-                displayProducts(selectedCurrency);
-            }
-        );
+    await loadMoreProducts();
 }
 
 
 showResults();
+
 </script>
 
 </body>
