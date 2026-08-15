@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -192,6 +193,23 @@ body {
   color: #26436D;
   margin-top: 14px;
 }
+
+#loadMoreButton {
+  padding: 12px 20px;
+  margin-top: 20px;
+  background-color: #D3A5AF;
+  color: white;
+  font-size: 17px;
+  font-family: inherit;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+#loadMoreButton:hover {
+  background-color: #26436D;
+}
 </style>
 </head>
 
@@ -230,6 +248,8 @@ async function showResults() {
     }
 
     let selectedCurrency = "NGN";
+    let currentPage = 1;
+    let hasMore = true;
 
     const currencies = {
         NGN: "Nigerian Naira (₦)",
@@ -298,13 +318,15 @@ async function showResults() {
             currencyOptions +
         "</select>" +
 
-        "<div id='productResults'></div>";
+        "<div id='productResults'></div>" +
+
+        "<button id='loadMoreButton'>Load More</button>";
 
     document.getElementById("results").innerHTML =
         resultsHTML;
 
 
-    async function displayProducts(currencyCode) {
+    async function displayProducts(currencyCode, page) {
 
         const response =
             await fetch(
@@ -320,7 +342,7 @@ async function showResults() {
                     body:
                         JSON.stringify({
                             search: search,
-                            page: 1
+                            page: page
                         })
                 }
             );
@@ -337,7 +359,7 @@ async function showResults() {
 
             document.getElementById(
                 "productResults"
-            ).innerHTML =
+            ).innerHTML +=
                 "<p>Could not load Etsy products.</p>";
 
             return;
@@ -422,35 +444,74 @@ async function showResults() {
                 "</a>";
         });
 
-        if (matchingProducts.length === 0) {
-
-            productsHTML =
-                "<p>No Etsy products found.</p>";
-        }
-
         document.getElementById(
             "productResults"
-        ).innerHTML =
+        ).innerHTML +=
             productsHTML;
+
+        hasMore =
+            data.hasMore;
+
+        if (!hasMore) {
+
+            document.getElementById(
+                "loadMoreButton"
+            ).style.display =
+                "none";
+        }
     }
 
 
     await displayProducts(
-        selectedCurrency
+        selectedCurrency,
+        currentPage
     );
+
+
+    document
+        .getElementById("loadMoreButton")
+        .addEventListener(
+            "click",
+            async function () {
+
+                if (!hasMore) {
+                    return;
+                }
+
+                currentPage++;
+
+                await displayProducts(
+                    selectedCurrency,
+                    currentPage
+                );
+            }
+        );
 
 
     document
         .getElementById("currencySelect")
         .addEventListener(
             "change",
-            function () {
+            async function () {
 
                 selectedCurrency =
                     this.value;
 
-                displayProducts(
-                    selectedCurrency
+                document.getElementById(
+                    "productResults"
+                ).innerHTML = "";
+
+                currentPage = 1;
+                hasMore = true;
+
+                document.getElementById(
+                    "loadMoreButton"
+                ).style.display =
+                    "block";
+
+                await displayProducts(
+                    selectedCurrency,
+                    currentPage
                 );
             }
         );
@@ -462,3 +523,4 @@ showResults();
 
 </body>
 </html>
+```
