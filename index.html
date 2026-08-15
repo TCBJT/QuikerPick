@@ -2,8 +2,8 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
 <title>QuikerPick: Pick it Quiker</title>
+
 <style>
 * {box-sizing: border-box;}
 
@@ -110,7 +110,7 @@ body {
 
 @font-face {
   font-family: basefont;
-  src: url( fonts/Scanport-1.ttf);
+  src: url(fonts/Scanport-1.ttf);
 }
 
 #currencySelect {
@@ -180,6 +180,7 @@ body {
 #productResults h3 {
   color: #26436D;
   margin-top: 0;
+  font-size: 19.6px;
 }
 
 #productResults p {
@@ -192,6 +193,14 @@ body {
   color: #26436D;
   margin-top: 14px;
 }
+
+.product-image {
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
 </style>
 </head>
 
@@ -201,6 +210,7 @@ body {
   <a class="active" href="#home">Home</a>
   <a href="#about">About</a>
   <a href="signup.html">Signup</a>
+
   <div class="search-container">
     <form>
       <input type="text" placeholder="Search.." name="search">
@@ -212,6 +222,7 @@ body {
 <div style="font-size: x-large;" id="results"></div>
 
 <script>
+
 const ETSY_FUNCTION_URL =
     "https://nhhfskfggryiqbyvjbzj.supabase.co/functions/v1/etsy-api";
 
@@ -220,6 +231,26 @@ const params =
 
 const search =
     params.get("search");
+
+
+/* FEATURE 1:
+   Limit product titles to 10 words.
+*/
+
+function limitTitleWords(title, maxWords) {
+
+    const words =
+        title.trim().split(/\s+/);
+
+    if (words.length <= maxWords) {
+        return title;
+    }
+
+    return words
+        .slice(0, maxWords)
+        .join(" ") + "...";
+}
+
 
 async function showResults() {
 
@@ -252,6 +283,7 @@ async function showResults() {
             await response.json();
 
         if (data.result !== "success") {
+
             throw new Error(
                 "Exchange rate request failed."
             );
@@ -271,6 +303,7 @@ async function showResults() {
         return;
     }
 
+
     let currencyOptions = "";
 
     for (const code in currencies) {
@@ -279,11 +312,14 @@ async function showResults() {
             "<option value='" +
             code +
             "'" +
-            (code === selectedCurrency ? " selected" : "") +
+            (code === selectedCurrency
+                ? " selected"
+                : "") +
             ">" +
             currencies[code] +
             "</option>";
     }
+
 
     let resultsHTML =
         "<h2>Search results for: " +
@@ -297,6 +333,7 @@ async function showResults() {
         "</select>" +
 
         "<div id='productResults'></div>";
+
 
     document.getElementById("results").innerHTML =
         resultsHTML;
@@ -322,8 +359,10 @@ async function showResults() {
                 }
             );
 
+
         const data =
             await response.json();
+
 
         if (!response.ok) {
 
@@ -340,10 +379,13 @@ async function showResults() {
             return;
         }
 
+
         const matchingProducts =
             data.results || [];
 
+
         let productsHTML = "";
+
 
         matchingProducts.forEach(product => {
 
@@ -354,7 +396,10 @@ async function showResults() {
 
             const originalPrice =
                 Number(product.price.amount) /
-                Number(product.price.divisor || 100);
+                Number(
+                    product.price.divisor || 100
+                );
+
 
             if (originalCurrency === "NGN") {
 
@@ -377,12 +422,15 @@ async function showResults() {
                     rateToNGN;
             }
 
+
             const exchangeRate =
                 exchangeRates[currencyCode] || 1;
+
 
             const convertedPrice =
                 priceInNGN *
                 exchangeRate;
+
 
             const formattedPrice =
                 new Intl.NumberFormat(
@@ -393,9 +441,27 @@ async function showResults() {
                     }
                 ).format(convertedPrice);
 
+
             const productLink =
                 "https://www.etsy.com/listing/" +
                 product.listing_id;
+
+
+            /* FEATURE 2:
+               Use Etsy's actual product image.
+            */
+
+            const productImage =
+                product.images &&
+                product.images.length > 0
+                    ? (
+                        product.images[0].url_570xN ||
+                        product.images[0].url_fullxfull ||
+                        product.images[0].url_300x300 ||
+                        ""
+                      )
+                    : "";
+
 
             productsHTML +=
 
@@ -404,19 +470,36 @@ async function showResults() {
                 "' target='_blank' " +
                 "style='text-decoration: none; color: inherit;'>" +
 
-                    "<div style='" +
-                        "padding: 15px;" +
-                        "margin-top: 10px;" +
-                        "width: 300px;" +
-                        "background: white;" +
-                        "border: 1px solid #ccc;" +
-                        "border-radius: 8px;" +
-                        "cursor: pointer;" +
-                    "'>" +
+                    "<div>" +
+
+                        /* FEATURE 3:
+                           Display product image.
+                        */
+
+                        (
+                            productImage
+                                ? "<img src='" +
+                                  productImage +
+                                  "' " +
+                                  "class='product-image' " +
+                                  "alt='" +
+                                  product.title +
+                                  "'>"
+                                : ""
+                        ) +
+
+
+                        /* FEATURE 4:
+                           Limit title to 10 words.
+                        */
 
                         "<h3>" +
-                        product.title +
+                        limitTitleWords(
+                            product.title,
+                            10
+                        ) +
                         "</h3>" +
+
 
                         "<p>Store: Etsy</p>" +
 
@@ -427,13 +510,16 @@ async function showResults() {
                     "</div>" +
 
                 "</a>";
+
         });
+
 
         if (matchingProducts.length === 0) {
 
             productsHTML =
                 "<p>No Etsy products found.</p>";
         }
+
 
         document.getElementById(
             "productResults"
@@ -463,7 +549,9 @@ async function showResults() {
         );
 }
 
+
 showResults();
+
 </script>
 
 </body>
