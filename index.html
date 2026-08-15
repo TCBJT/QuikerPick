@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -193,6 +194,14 @@ body {
   font-weight: bold;
   color: #26436D;
   margin-top: 14px;
+}
+
+#productResults img {
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-bottom: 12px;
 }
 
 #loadMoreButton {
@@ -430,6 +439,13 @@ async function showResults() {
                     ? titleWords.slice(0, 10).join(" ") + "..."
                     : product.title;
 
+            // Get Etsy product image
+            const imageUrl =
+                product.images &&
+                product.images.length > 0
+                    ? product.images[0].url_570xN
+                    : null;
+
             productsHTML +=
 
                 "<a href='" +
@@ -438,6 +454,14 @@ async function showResults() {
                 "style='text-decoration: none; color: inherit;'>" +
 
                     "<div>" +
+
+                        (imageUrl
+                            ? "<img src='" +
+                              imageUrl +
+                              "' alt='" +
+                              shortTitle.replace(/'/g, "&#39;") +
+                              "'>"
+                            : "") +
 
                         "<h3>" +
                         shortTitle +
@@ -533,3 +557,4 @@ showResults();
 
 </body>
 </html>
+```
